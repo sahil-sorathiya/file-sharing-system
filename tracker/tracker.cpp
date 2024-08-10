@@ -1,5 +1,12 @@
 #include "headers.h"
 
+unordered_map <string, User> registeredUsers; // userName
+// unordered_map <string, string> tokensToUser; //token, userName
+// unordered_map <string, pair<string, string>> UserToIpAndTokens; // userName, IP:PORT, token
+unordered_map <string, string> userToIp; // userName, IP:PORT
+unordered_map <string, Group> groups; // groupName
+mutex userMapMutex, groupMapMutex, loginMutex;
+
 int main(int argc, char *argv[]){
 
     pair <string, int> trackerIpPort = processArgs(argc, argv);

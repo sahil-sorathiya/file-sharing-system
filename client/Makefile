@@ -1,12 +1,14 @@
 CC = g++
 CFLAGS = -Wall
-DEPS = headers.h
-OBJ = utils.o client.o
+LDFLAGS = -lssl -lcrypto
+DEPS = headers.h  
+OBJ = utils.o handlers.o client.o
+
 %.o: %.cpp $(DEPS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 client: $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ -pthread -I/usr/include/openssl
- 
+	$(CC) $(CFLAGS) -pthread -o $@ $^ $(LDFLAGS)
+
 clean:
-	rm -rf *o client
+	rm -rf *.o client
