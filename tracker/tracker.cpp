@@ -77,6 +77,9 @@ int main(int argc, char *argv[]){
     }
 
     cout << "Tracker listning on Port " + to_string(trackerIpPort.second) + "\n" << flush;
+    
+    thread t0(handleTrackerQuit, trackerFd);
+    t0.detach();
 
     while(true){
         struct sockaddr_in clientAddr;

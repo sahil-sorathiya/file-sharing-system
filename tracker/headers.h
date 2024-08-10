@@ -10,6 +10,7 @@
 
 #define TOKEN_EXPIRY_DURATION 3600
 #define SECRET_KEY "chin_tapak_dum_dum"
+#define PIECE_SIZE 1024
 
 using namespace std;
 
@@ -20,7 +21,7 @@ class File {
 public:
     
     File() = default;
-    File(string fileName, vector <string> SHA, int size);
+    File(string fileName, vector <string> SHA, int size, string userName);
 
     string fileName;
     vector <string> SHA; // At zero SHA of entire file, then PieceWise SHA
@@ -61,17 +62,22 @@ string generateToken(string payload);
 string validateToken(string token);
 
 // handlers.cpp
+void handleTrackerQuit(int trackerFd);
 void handleClientRequest(int clientSocket, string clientIP, int clientPort);
 string executeCommand(int clientSocket, string clientIP, int clientPort, string command);
 string createUser(string userName, string password);
-string userLogin(string userName, string password, string clientIP, int clientPort);
+string login(string userName, string password, string clientIP, int clientPort);
 string createGroup(string groupName, string authToken);
 string joinGroup(string groupName, string authToken);
 string listRequests(string groupName, string authToken);
 string listGroups(string authToken);
 string acceptRequest(string groupName, string pendingUserName, string authToken);
 string listFiles(string groupName, string authToken);
-
+string uploadFiles(string fileName, string groupName, string fileSize, string SHAs, string authToken);
+string downloadFile(string fileName, string groupName, string authToken);
+string stopShare(string groupName, string fileName, string authToken);
+string leaveGroup(string groupName, string authToken);
+string logout(string authToken);
 
 
 

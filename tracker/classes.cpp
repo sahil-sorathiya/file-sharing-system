@@ -11,10 +11,11 @@
 //     int size;
 // };
 
-File::File(string fileName, vector <string> SHA, int size){
+File::File(string fileName, vector <string> SHA, int size, string userName){
     this->fileName = fileName;
     this->SHA = SHA;
     this->size = size;
+    this->userNames.insert(userName);
 }
 
 // class User {

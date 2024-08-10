@@ -1,5 +1,16 @@
 #include "headers.h"
 
+void handleTrackerQuit(int trackerFd) {
+    string cmd;
+    while(1) {
+        cin >> cmd;
+        if(cmd == "quit") {
+            close(trackerFd);
+            exit(0);
+        }
+    }
+}
+
 void handleClientRequest(int clientSocket, string clientIP, int clientPort){
     while (true) {
             char buffer[10240];
@@ -51,7 +62,7 @@ string executeCommand(int clientSocket, string clientIP, int clientPort, string 
         string userName = tokens[1];
         string password = tokens[2];
 
-        return userLogin(userName, password, clientIP, clientPort);
+        return login(userName, password, clientIP, clientPort);
     }
 
     if(tokens[0] == "create_group") {
@@ -96,6 +107,45 @@ string executeCommand(int clientSocket, string clientIP, int clientPort, string 
         return listFiles(groupName, authToken);
     }
 
+    if(tokens[0] == "upload_files"){
+        if(tokens.size() != 6) return "TrackerError: Invalid Arguments to list_files command!!";
+        string fileName = tokens[1];
+        string groupName = tokens[2];
+        string fileSize = tokens[3];
+        string SHAs = tokens[4];
+        string authToken = tokens[5];
+        return uploadFiles(fileName, groupName, fileSize, SHAs, authToken);
+    }
+
+    if(tokens[0] == "download_file"){
+        if(tokens.size() != 4) return "TrackerError: Invalid Arguments to download_file command!!";
+        string groupName = tokens[1];
+        string fileName = tokens[2];
+        string authToken = tokens[3];
+        return downloadFile(fileName, groupName, authToken);
+    }
+
+    if(tokens[0] == "stop_share"){
+        if(tokens.size() != 4) return "TrackerError: Invalid Arguments to stop_share command!!";
+        string groupName = tokens[1];
+        string fileName = tokens[2];
+        string authToken = tokens[3];
+        return stopShare(groupName, fileName, authToken);
+    }
+    
+    if(tokens[0] == "leave_group"){
+        if(tokens.size() != 3) return "TrackerError: Invalid Arguments to leave_group command!!";
+        string groupName = tokens[1];
+        string authToken = tokens[2];
+        return leaveGroup(groupName, authToken);
+    }
+
+    if(tokens[0] == "logout"){
+        if(tokens.size() != 2) return "TrackerError: Invalid Arguments to logout command!!";
+        string authToken = tokens[1];
+        return logout(authToken);
+    }
+
     return "TrackerError: Invalid Command!!";
 }
 
@@ -108,7 +158,7 @@ string createUser(string userName, string password){
     return "TrackerSuccess: User Registered Sucessfully!!";
 }
 
-string userLogin(string userName, string password, string clientIP, int clientPort){
+string login(string userName, string password, string clientIP, int clientPort){
     {
         lock_guard <mutex> guard(userMapMutex);
 
@@ -255,4 +305,164 @@ string listFiles(string groupName, string authToken){
     }
 }
 
+
+string uploadFiles(string fileName, string groupName, string fileSize, string SHAs, string authToken){
+    string userName = validateToken(authToken);
+    if(userName == "") return "TrackerError: Authentication Failed!!";
+
+    {
+        lock_guard <mutex> guard(groupMapMutex);
+        if(groups.find(groupName) == groups.end()) {
+            return "TrackerError: Group Not Exist!!";
+        }
+
+        Group group = groups[groupName];
+        
+        auto it = find(group.participants.begin(), group.participants.end(), userName);
+        if(it == group.participants.end()){
+            return "TrackerError: You are not a member of this group!!";
+        }
+
+        vector <string> SHAVector = tokenize(SHAs, ':');
+
+        int sizeOfSHAVector = (stoi(fileSize) / PIECE_SIZE) + 1; // +1 for entire file's SHA
+        if(stoi(fileSize) % PIECE_SIZE) sizeOfSHAVector++;
+
+        if((int)SHAVector.size() != sizeOfSHAVector + 1) {
+            return "TrackerError: Invalid (More/Less) number of SHAs!!";
+        }
+
+        // If file exist in group Check SHA
+        if(group.files.find(fileName) != group.files.end()){
+            if(group.files[fileName].SHA[0] != SHAVector[0]){
+                return "TrackerError: File with same name but different content exist, change name of the file!!";
+            }
+
+            // If sha matches insert userName into set
+            groups[groupName].files[fileName].userNames.insert(userName);
+            return "TrackerSuccess: File Uploaded Successfully!!";
+        }
+
+        File newFile(fileName, SHAVector, stoi(fileSize), userName);
+        groups[groupName].files[fileName] = newFile;
+        return "TrackerSuccess: File Uploaded Successfully!!";
+
+    }
+}
+
+string downloadFile(string fileName, string groupName, string authToken) {
+    string userName = validateToken(authToken);
+    if(userName == "") return "TrackerError: Authentication Failed!!";
+
+    {
+        lock_guard <mutex> guard(groupMapMutex);
+
+        if(groups.find(groupName) == groups.end()) {
+            return "TrackerError: Group Not Exist!!";
+        }
+
+        Group group = groups[groupName];
+        
+        auto it = find(group.participants.begin(), group.participants.end(), userName);
+        if(it == group.participants.end()){
+            return "TrackerError: You are not a member of this group!!";
+        }
+
+       
+        if(group.files.find(fileName) == group.files.end()){
+            return "TrackerError: File Not Found!!";
+        }
+
+        File file = group.files[fileName];
+        string temp = "";
+        
+        temp.append(to_string(file.size) + " ");
+
+        for(auto it : file.SHA) {
+            temp.append(it + ":");
+        }
+
+        {
+            lock_guard <mutex> guard(loginMutex);
+            for(auto it : file.userNames) {
+                if(userToIp.find(it) != userToIp.end()) {
+                    temp.append(userToIp[it] + " ");
+                }
+            }
+        }
+        return "TrackerSuccess: " + temp;
+    }
+}
+
+string stopShare(string groupName, string fileName, string authToken) {
+    string userName = validateToken(authToken);
+    if(userName == "") return "TrackerError: Authentication Failed!!";
+
+    {
+        lock_guard <mutex> guard(groupMapMutex);
+        if(groups.find(groupName) == groups.end()) {
+            return "TrackerError: Group Not Exist!!";
+        }
+
+        Group group = groups[groupName];
+        
+        auto it = find(group.participants.begin(), group.participants.end(), userName);
+        if(it == group.participants.end()){
+            return "TrackerError: You are not a member of this group!!";
+        }
+
+        if(group.files.find(fileName) == group.files.end()){
+            return "TrackerError: File doesn't exist!!";
+        }
+
+        if(group.files[fileName].userNames.find(userName) == group.files[fileName].userNames.end()){
+            return "TrackerError: You are not sharing this file!!";
+        }
+
+        groups[groupName].files[fileName].userNames.erase(userName);
+        return "TrackerSuccess: File Sharing is stopped!!";
+
+    }
+}
+
+string leaveGroup(string groupName, string authToken) {
+    string userName = validateToken(authToken);
+    if(userName == "") return "TrackerError: Authentication Failed!!";
+
+    {
+        lock_guard <mutex> guard(groupMapMutex);
+        if(groups.find(groupName) == groups.end()) {
+            return "TrackerError: Group Not Exist!!";
+        }
+
+        Group group = groups[groupName];
+        
+        auto it = find(group.participants.begin(), group.participants.end(), userName);
+        if(it == group.participants.end()){
+            return "TrackerError: You are not a member of this group!!";
+        }
+
+        groups[groupName].participants.erase(it);
+
+        // If Only 1 participant is there
+        if(groups[groupName].participants.size()==0) {
+            groups.erase(groupName);
+            return "TrackerSuccess: You Left The Group Successfully!!";
+        }
+
+        for(auto &it : groups[groupName].files) {
+            it.second.userNames.erase(userName);
+        }
+        return "TrackerSuccess: You Left The Group Successfully!!";
+    }
+}
+
+string logout(string authToken) {
+    string userName = validateToken(authToken);
+    if(userName == "") return "TrackerError: Authentication Failed!!";
+
+    lock_guard <mutex> guard(loginMutex);
+    userToIp.erase(userName);
+    return "TrackerSuccess: User Logged Out Successfully!!";
+}
 
