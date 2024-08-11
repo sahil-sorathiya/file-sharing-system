@@ -65,6 +65,7 @@ string validateToken(string token);
 void handleTrackerQuit(int trackerFd);
 void handleClientRequest(int clientSocket, string clientIP, int clientPort);
 string executeCommand(int clientSocket, string clientIP, int clientPort, string command);
+
 string createUser(string userName, string password);
 string login(string userName, string password, string clientIP, int clientPort);
 string createGroup(string groupName, string authToken);

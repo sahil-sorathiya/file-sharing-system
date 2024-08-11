@@ -1,6 +1,8 @@
 #include "headers.h"
 
-int trackerNumber = 1;
+string authToken = "default";
+
+map <pair<string, string>, string> fileNameToFilePath;
 
 int main(int argc, char *argv[]){
     pair <pair<string, int>, pair<string, int>> clientAndTrackerIpPort = processArgs(argc, argv);
@@ -41,39 +43,8 @@ int main(int argc, char *argv[]){
     }
     cout << "Success: Connected to Tracker!1\n" << flush;
 
-    char buffer[10240];
     while (true){
-        string inputFromClient;
-        cout << "Enter Command : " << flush;
-        getline(cin, inputFromClient);
-
-        if(inputFromClient == "quit"){
-            cout << "Bye.\n" << flush;
-            close(clientSocket);
-            exit(0);
-        }
-
-        string packet = makePacket(inputFromClient);
-
-        if(send(clientSocket, inputFromClient.c_str(), inputFromClient.size(), 0) < 0){
-            cerr << "Error: Packet has not been sent to tracker " + string(strerror(errno))  + "\n" << flush;
-            close(clientSocket);
-            exit(errno);
-        }
-
-        int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead == 0) {
-            cout << "Connection Closed: Tracker-socket at fd " + to_string(clientSocket) + " IP " + trackerIpPort.first + " Port " + to_string(trackerIpPort.second) + " closed the connection\n" << flush;
-            close(clientSocket);
-            break;
-        } else if (bytesRead < 0) {
-            cerr << "Connection Force-Closed: Error reading from clientSocket at fd " + to_string(clientSocket) + " IP " + trackerIpPort.first + " Port " + to_string(trackerIpPort.second) + "\n" << flush;
-            close(clientSocket);
-            break;
-        } else {
-            string receivedData = string(buffer, bytesRead);
-            cout << "Received data: " << receivedData << "\n" << flush;
-        }
+        processUserRequests(clientSocket, trackerIpPort);
     }
 
     return 0;

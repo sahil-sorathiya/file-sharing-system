@@ -44,6 +44,7 @@ void handleClientRequest(int clientSocket, string clientIP, int clientPort){
 string executeCommand(int clientSocket, string clientIP, int clientPort, string command){
     if(command == "") return "TrackerError: Invalid Command!!";
     vector <string> tokens = tokenize(command, ' ');
+    cout << tokens.size() << endl;
     
     if(tokens.size() < 1) return "TrackerError: Invalid Command!!";
 
@@ -107,7 +108,7 @@ string executeCommand(int clientSocket, string clientIP, int clientPort, string 
         return listFiles(groupName, authToken);
     }
 
-    if(tokens[0] == "upload_files"){
+    if(tokens[0] == "upload_file"){
         if(tokens.size() != 6) return "TrackerError: Invalid Arguments to list_files command!!";
         string fileName = tokens[1];
         string groupName = tokens[2];
@@ -386,7 +387,7 @@ string downloadFile(string fileName, string groupName, string authToken) {
             lock_guard <mutex> guard(loginMutex);
             for(auto it : file.userNames) {
                 if(userToIp.find(it) != userToIp.end()) {
-                    temp.append(userToIp[it] + " ");
+                    temp.append(userToIp[it] + ",");
                 }
             }
         }

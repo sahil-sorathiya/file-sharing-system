@@ -44,3 +44,72 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
 
     return {{clientIp, clientPort}, {trackerIp, trackerPort}};
 }
+
+
+vector<string> findSHA(const char* filePath) {
+
+    int fileFd = open(filePath, O_RDONLY);
+
+    if (fileFd < 0) {
+        perror("Error: Opening the file!!");
+        return {};
+    }
+    SHA256_CTX sha256_1, sha256_2;
+    SHA256_Init(&sha256_1);
+
+    vector<SHA256_CTX> temp;
+    char buffer[PIECE_SIZE];
+    ssize_t bytesRead;
+
+    while ((bytesRead = read(fileFd, buffer, sizeof(buffer))) > 0) {
+        SHA256_Init(&sha256_2);
+        SHA256_Update(&sha256_1, buffer, bytesRead);
+        SHA256_Update(&sha256_2, buffer, bytesRead);
+
+        temp.push_back(sha256_2);
+    }
+    close(fileFd);
+
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_Final(hash, &sha256_1);
+
+    char hex_hash[2 * SHA256_DIGEST_LENGTH + 1];
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        sprintf(hex_hash + 2 * i, "%02x", hash[i]);
+    }
+
+    vector<string> fileSHAs;
+    fileSHAs.push_back(hex_hash);
+    
+    for(auto &it : temp) {
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256_Final(hash, &it);
+
+        char hex_hash[2 * SHA256_DIGEST_LENGTH + 1];
+        for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+            sprintf(hex_hash + 2 * i, "%02x", hash[i]);
+        }
+        fileSHAs.push_back(hex_hash);
+    }
+    return fileSHAs;
+}
+
+int giveFileSize(const char *filePath){
+
+    int fileFd = open(filePath, O_RDONLY);
+
+    if (fileFd == -1) {
+        cerr << "Error: opening file " << strerror(errno) << endl;
+        return -1;
+    }
+
+    off_t fileSize = lseek(fileFd, 0, SEEK_END);
+
+    if (fileSize == -1) {
+        cerr << "Error: seeking to end of file " << strerror(errno) << endl;
+        close(fileFd);
+        return -1;
+    }
+
+    return fileSize;
+}

@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -Wall
+CFLAGS = -Wall -Wno-deprecated-declarations
 LDFLAGS = -lssl -lcrypto
 DEPS = headers.h  
 OBJ = utils.o handlers.o client.o
