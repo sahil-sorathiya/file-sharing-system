@@ -22,11 +22,11 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
         exit(0);
     }
     char *trackerInfoFileName = argv[2];
-    char *clientIpAndPort = argv[1];
+    char *seederIpAndPort = argv[1];
     
-    vector <string> clientIpPort = tokenize(clientIpAndPort, ':');
-    string clientIp = clientIpPort[0];
-    int clientPort = stoi(clientIpPort[1]);
+    vector <string> seederIpPort = tokenize(seederIpAndPort, ':');
+    string seederIp = seederIpPort[0];
+    int seederPort = stoi(seederIpPort[1]);
     
     int fd = open(trackerInfoFileName, O_RDONLY);
     if(fd < 0) {
@@ -42,7 +42,7 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
     string trackerIp = ipAndPorts[0];
     int trackerPort = stoi(ipAndPorts[1]);
 
-    return {{clientIp, clientPort}, {trackerIp, trackerPort}};
+    return {{seederIp, seederPort}, {trackerIp, trackerPort}};
 }
 
 
@@ -92,6 +92,24 @@ vector<string> findSHA(const char* filePath) {
         fileSHAs.push_back(hex_hash);
     }
     return fileSHAs;
+}
+
+string findPieceSHA(string pieceData) {
+
+    SHA256_CTX sha256_2;
+    SHA256_Init(&sha256_2);
+
+    SHA256_Update(&sha256_2, pieceData, pieceData.size());
+
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_Final(hash, &sha256_2);
+
+    char hex_hash[2 * SHA256_DIGEST_LENGTH + 1];
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        sprintf(hex_hash + 2 * i, "%02x", hash[i]);
+    }
+
+    return hex_hash;
 }
 
 int giveFileSize(const char *filePath){

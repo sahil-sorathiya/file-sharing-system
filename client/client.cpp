@@ -3,11 +3,15 @@
 string authToken = "default";
 
 map <pair<string, string>, string> fileNameToFilePath;
+map <pair<string, vector<int> > filePathToAvailablePieces;
 
 int main(int argc, char *argv[]){
     pair <pair<string, int>, pair<string, int>> clientAndTrackerIpPort = processArgs(argc, argv);
-    pair<string, int> clientIpPort = clientAndTrackerIpPort.first;
+    pair<string, int> seederIpPort = clientAndTrackerIpPort.first;
     pair<string, int> trackerIpPort = clientAndTrackerIpPort.second;
+
+    thread t0(openSeederSocket, seederIpPort);
+    t0.detach();
 
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket < 0) {
@@ -44,7 +48,10 @@ int main(int argc, char *argv[]){
     cout << "Success: Connected to Tracker!1\n" << flush;
 
     while (true){
-        processUserRequests(clientSocket, trackerIpPort);
+        string inputFromClient;
+        cout << "Enter Command : " << flush;
+        getline(cin, inputFromClient);
+        processUserRequests(clientSocket, inputFromClient, trackerIpPort);
     }
 
     return 0;
