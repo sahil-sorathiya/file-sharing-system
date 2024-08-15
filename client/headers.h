@@ -18,10 +18,15 @@
 using namespace std;
 
 extern map <pair<string, string>, string> fileNameToFilePath; // fileName, groupName, filePath
-extern map <pair<string, vector<int> > filePathToAvailablePieces // filePath, pieceNumber
-extern mutex nameToPathMutex, pathToPieceMutex;
+extern map <string, vector<int>> filePathToAvailablePieces; // filePath, pieceNumber
+extern set <pair <string, string>> downloadingFiles; // groupName, fileNmae
+extern set <pair <string, string>> downloadedFiles; // groupName, fileName
 
 extern string authToken;
+
+extern mutex nameToPathMutex, pathToPieceMutex, downloadFileMutex;
+
+// classes.cpp
 class ThreadPool {
 public:
     ThreadPool(size_t numThreads);
@@ -40,8 +45,18 @@ private:
     void workerThread();
 };
 
-void processUserRequests(int clientSocket, pair<string, int> trackerIpPort);
+// handlers.cpp
+void openSeederSocket(pair <string, int> seederIpPort);
+void handleLeecherRequest(int leecherSocket, string leecherIP, int leecherPort);
+string executeCommand(string command);
+void processUserRequests(int clientSocket, string inputFromClient, pair<string, int> trackerIpPort,  pair<string, int> seederIpPort);
+void handleFileDownload(string fileName, string groupName, string destinationPath, int fileSize, string SHAsStr, string ipAndPortsStr, int clientSocket, pair<string, int> trackerIpPort, pair<string, int> seederIpPort);
+void downloadFile(string fileName, string groupName, string destinationPath, int fileSize, vector <string> SHAs, unordered_map <int, vector <int>> pieceToSeeders, int clientSocket, pair<string, int> trackerIpPort, pair<string, int> seederIpPort);
+
+// utils.cpp
 vector <string> tokenize(string buffer, char separator);
 pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]);
-int giveFileSize(const char *filePath);
-vector<string> findSHA(const char* filePath);
+vector<string> findSHA(string filePath);
+string findPieceSHA(string pieceData);
+int giveFileSize(string filePath);
+

@@ -63,11 +63,11 @@ string validateToken(string token);
 
 // handlers.cpp
 void handleTrackerQuit(int trackerFd);
-void handleClientRequest(int clientSocket, string clientIP, int clientPort);
-string executeCommand(int clientSocket, string clientIP, int clientPort, string command);
+void handleClientRequest(int clientSocket);
+string executeCommand(int clientSocket, string command);
 
 string createUser(string userName, string password);
-string login(string userName, string password, string clientIP, int clientPort);
+string login(string userName, string password, string seederIpPort);
 string createGroup(string groupName, string authToken);
 string joinGroup(string groupName, string authToken);
 string listRequests(string groupName, string authToken);

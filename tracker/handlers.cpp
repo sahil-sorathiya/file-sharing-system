@@ -11,16 +11,16 @@ void handleTrackerQuit(int trackerFd) {
     }
 }
 
-void handleClientRequest(int clientSocket, string clientIP, int clientPort){
+void handleClientRequest(int clientSocket){
     while (true) {
-        char buffer[10240];
+        char buffer[524288];
         int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
         if (bytesRead == 0) {
-            cout << "Connection Closed: Client-socket at fd " + to_string(clientSocket) + " IP " + clientIP + " Port " + to_string(clientPort) + " closed the connection\n" << flush;
+            cout << "Connection Closed: Client-socket at fd " + to_string(clientSocket) + " closed the connection\n" << flush;
             close(clientSocket);
             break;
         } else if (bytesRead < 0) {
-            cerr << "Connection Force-Closed: Error reading from clientSocket at fd " + to_string(clientSocket) + " IP " + clientIP + " Port " + to_string(clientPort) + "\n" << flush;
+            cerr << "Connection Force-Closed: Error reading from clientSocket at fd " + to_string(clientSocket) + "\n" << flush;
             close(clientSocket);
             break;
         } else {
@@ -29,7 +29,7 @@ void handleClientRequest(int clientSocket, string clientIP, int clientPort){
 
             cout << "Received data: " << receivedData << "\n" << flush;
 
-            string response = executeCommand(clientSocket, clientIP, clientPort, receivedData);
+            string response = executeCommand(clientSocket, receivedData);
 
             if(send(clientSocket, response.c_str(), response.size(), 0) < 0){
                 cerr << "Error sending message to client " + string(strerror(errno))  + "\n" << flush;
@@ -40,12 +40,12 @@ void handleClientRequest(int clientSocket, string clientIP, int clientPort){
     }
 }
 
-string executeCommand(int clientSocket, string clientIP, int clientPort, string command){
+string executeCommand(int clientSocket, string command){
     if(command == "") return "TrackerError: Invalid Command!!";
     vector <string> tokens = tokenize(command, ' ');
     
     if(tokens.size() < 1) return "TrackerError: Invalid Command!!";
-
+    cout << "Total Tokens : " + to_string(tokens.size())  + "\n" << flush;
     if(tokens[0] == "create_user"){
         if(tokens.size() != 3) return "TrackerError: Invalid Arguments to create_user command!!";
         
@@ -56,12 +56,13 @@ string executeCommand(int clientSocket, string clientIP, int clientPort, string 
     }
 
     if(tokens[0] == "login"){
-        if(tokens.size() != 3) return "TrackerError: Invalid Arguments to login command!!";
+        if(tokens.size() != 4) return "TrackerError: Invalid Arguments to login command!!";
         
         string userName = tokens[1];
         string password = tokens[2];
+        string seederIpPort = tokens[3];
 
-        return login(userName, password, clientIP, clientPort);
+        return login(userName, password, seederIpPort);
     }
 
     if(tokens[0] == "create_group") {
@@ -107,7 +108,7 @@ string executeCommand(int clientSocket, string clientIP, int clientPort, string 
     }
 
     if(tokens[0] == "upload_file"){
-        if(tokens.size() != 6) return "TrackerError: Invalid Arguments to list_files command!!";
+        if(tokens.size() != 6) return "TrackerError: Invalid Arguments to upload_files command!!";
         string fileName = tokens[1];
         string groupName = tokens[2];
         string fileSize = tokens[3];
@@ -157,7 +158,7 @@ string createUser(string userName, string password){
     return "TrackerSuccess: User Registered Sucessfully!!";
 }
 
-string login(string userName, string password, string clientIP, int clientPort){
+string login(string userName, string password, string seederIpPort){
     {
         lock_guard <mutex> guard(userMapMutex);
 
@@ -173,7 +174,7 @@ string login(string userName, string password, string clientIP, int clientPort){
     
     {
         lock_guard <mutex> guard(loginMutex);
-        userToIp[userName] = clientIP + ":" + to_string(clientPort);
+        userToIp[userName] = seederIpPort;
     }
     return "TrackerSuccess: " + loginToken;
 }
@@ -326,8 +327,7 @@ string uploadFiles(string fileName, string groupName, string fileSize, string SH
 
         int sizeOfSHAVector = (stoi(fileSize) / PIECE_SIZE) + 1; // +1 for entire file's SHA
         if(stoi(fileSize) % PIECE_SIZE) sizeOfSHAVector++;
-
-        if((int)SHAVector.size() != sizeOfSHAVector + 1) {
+        if((int)SHAVector.size() != sizeOfSHAVector) {
             return "TrackerError: Invalid (More/Less) number of SHAs!!";
         }
 
@@ -383,6 +383,7 @@ string downloadFile(string fileName, string groupName, string authToken) {
 
         {
             lock_guard <mutex> guard(loginMutex);
+            temp.push_back(' ');
             for(auto it : file.userNames) {
                 if(userToIp.find(it) != userToIp.end()) {
                     temp.append(userToIp[it] + ",");

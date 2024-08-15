@@ -35,8 +35,8 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
         exit(0); 
     }
     
-    char buffer[10240];
-    read(fd, buffer, 10240);
+    char buffer[524288];
+    read(fd, buffer, sizeof(buffer));
 
     vector <string> ipAndPorts = tokenize(buffer, '\n');
     string trackerIp = ipAndPorts[0];
@@ -46,15 +46,15 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
 }
 
 
-vector<string> findSHA(const char* filePath) {
+vector<string> findSHA(string filePath){
 
-    int fileFd = open(filePath, O_RDONLY);
+    int fileFd = open(filePath.c_str(), O_RDONLY);
 
     if (fileFd < 0) {
         perror("Error: Opening the file!!");
         return {};
     }
-    SHA256_CTX sha256_1, sha256_2;
+    SHA256_CTX sha256_1;
     SHA256_Init(&sha256_1);
 
     vector<SHA256_CTX> temp;
@@ -62,6 +62,7 @@ vector<string> findSHA(const char* filePath) {
     ssize_t bytesRead;
 
     while ((bytesRead = read(fileFd, buffer, sizeof(buffer))) > 0) {
+        SHA256_CTX sha256_2;
         SHA256_Init(&sha256_2);
         SHA256_Update(&sha256_1, buffer, bytesRead);
         SHA256_Update(&sha256_2, buffer, bytesRead);
@@ -94,12 +95,12 @@ vector<string> findSHA(const char* filePath) {
     return fileSHAs;
 }
 
-string findPieceSHA(string pieceData) {
+string findPieceSHA(string pieceData){
 
     SHA256_CTX sha256_2;
     SHA256_Init(&sha256_2);
 
-    SHA256_Update(&sha256_2, pieceData, pieceData.size());
+    SHA256_Update(&sha256_2, pieceData.c_str(), pieceData.size());
 
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_Final(hash, &sha256_2);
@@ -112,9 +113,9 @@ string findPieceSHA(string pieceData) {
     return hex_hash;
 }
 
-int giveFileSize(const char *filePath){
+int giveFileSize(string filePath){
 
-    int fileFd = open(filePath, O_RDONLY);
+    int fileFd = open(filePath.c_str(), O_RDONLY);
 
     if (fileFd == -1) {
         cerr << "Error: opening file " << strerror(errno) << endl;

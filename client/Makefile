@@ -2,7 +2,7 @@ CC = g++
 CFLAGS = -Wall -Wno-deprecated-declarations
 LDFLAGS = -lssl -lcrypto
 DEPS = headers.h  
-OBJ = utils.o handlers.o client.o
+OBJ = classes.o utils.o handlers.o client.o
 
 %.o: %.cpp $(DEPS)
 	$(CC) $(CFLAGS) -c -o $@ $<

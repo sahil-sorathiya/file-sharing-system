@@ -3,7 +3,11 @@
 string authToken = "default";
 
 map <pair<string, string>, string> fileNameToFilePath;
-map <pair<string, vector<int> > filePathToAvailablePieces;
+map <string, vector<int> > filePathToAvailablePieces;
+set <pair <string, string>> downloadingFiles;
+set <pair <string, string>> downloadedFiles;
+
+mutex nameToPathMutex, pathToPieceMutex, downloadFileMutex;
 
 int main(int argc, char *argv[]){
     pair <pair<string, int>, pair<string, int>> clientAndTrackerIpPort = processArgs(argc, argv);
@@ -45,13 +49,13 @@ int main(int argc, char *argv[]){
         close(clientSocket);
         exit(errno);
     }
-    cout << "Success: Connected to Tracker!1\n" << flush;
+    cout << "Success: Connected to Tracker!!\n" << flush;
 
     while (true){
         string inputFromClient;
         cout << "Enter Command : " << flush;
         getline(cin, inputFromClient);
-        processUserRequests(clientSocket, inputFromClient, trackerIpPort);
+        processUserRequests(clientSocket, inputFromClient, trackerIpPort, seederIpPort);
     }
 
     return 0;

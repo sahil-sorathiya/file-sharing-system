@@ -30,9 +30,9 @@ pair <string, int> processArgs(int argc, char *argv[]){
         exit(0); 
     }
 
-    char buffer[10240];
+    char buffer[524288];
 
-    read(fd, buffer, 10240);
+    read(fd, buffer, sizeof(buffer));
 
     vector <string> ipAndPorts = tokenize(buffer, '\n');
 

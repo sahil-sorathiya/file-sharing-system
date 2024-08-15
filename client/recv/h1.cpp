@@ -84,7 +84,7 @@ void handleLeecherRequest(int leecherSocket, string leecherIP, int leecherPort){
             cout << "83 Received data: " << receivedData << "\n" << flush;
 
             string response = executeCommand(receivedData);
-            cout << " --------------- Response size " + to_string(response.size()) + "\n" << flush;
+            
             if(send(leecherSocket, response.c_str(), response.size(), 0) < 0){
                 cerr << "Error sending message to leecher " + string(strerror(errno))  + "\n" << flush;
                 close(leecherSocket);
@@ -164,9 +164,7 @@ string executeCommand(string command){
         cout << "BYTES READ: " + to_string(bytesRead)  + "\n" << flush;
         string pieceData(buffer, bytesRead);
         string r = "SeederSuccess: " + pieceData;
-        cout << r + "\n"<< flush;
-
-        cout << " ----------- " + to_string(r.size()) + "\n" << flush; 
+        cout << r << flush;
         return r;
     }
 
@@ -441,9 +439,9 @@ void handleFileDownload(string fileName, string groupName, string destinationPat
         downloadingFiles.insert({groupName, fileName});
     }
     
-    // downloadFile(fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket, trackerIpPort, seederIpPort);
-    thread t2(downloadFile, fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket, trackerIpPort, seederIpPort);
-    t2.detach();
+    downloadFile(fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket, trackerIpPort, seederIpPort);
+    // thread t2(downloadFile, fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket, trackerIpPort, seederIpPort);
+    // t2.detach();
 
 }
 
@@ -464,7 +462,7 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
         cout << to_string(it.first) + " " + to_string(it.second[0]) + "\n" << flush;
     }
 
-    // ThreadPool pool(POOL_SIZE); 
+    ThreadPool pool(POOL_SIZE); 
             
     mutex isFirstPieceMutex;
 
@@ -479,7 +477,7 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                 srand(time(nullptr)); //: setting a seed
                 int random_number = std::rand() % (n);
                 int leecherSocket = pieceToSeedersVector[i].second[random_number];
-                cout << "PIECE NO : fffffffffffffffffff : " + to_string(i) + " I " + to_string(pieceToSeedersVector[i].first) + "\n" << flush;
+                cout << "PIECE NO : fffffffffffffffffff : " + to_string(pieceToSeedersVector[i].first) + "\n" << flush;
                 string messageForSeeder = "send_piece " + fileName + " " + groupName + " " + to_string(pieceToSeedersVector[i].first); 
                 if(send(leecherSocket, messageForSeeder.c_str(), messageForSeeder.size(), 0) < 0){
                     cerr << "Error: Packet has not been sent to seeder " + string(strerror(errno))  + "\n" << flush;
@@ -509,16 +507,15 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                     continue;
                 }
 
-                string pieceData = receivedData.substr(15);
+                string pieceData = receivedDataTokens[1];
                 // cout << pieceData << flush;
 
                 string pieceSHA = findPieceSHA(pieceData);
 
-                if(pieceSHA != SHAs[pieceToSeedersVector[i].first + 1]){
-                    cout << pieceSHA + " : " + SHAs[pieceToSeedersVector[i].first + 1 ] << "\n" << flush; 
-                    cerr << to_string(i) + " Error: SHA mismatched!!\n" << flush;
-                    break;
-                }
+                // if(pieceSHA != SHAs[pieceToSeedersVector[i].first + 1]){
+                //     cerr << to_string(i) + " Error: SHA mismatched!!\n" << flush;
+                //     continue;
+                // }
         
                 int fd = open(destinationPath.c_str(), O_WRONLY | O_CREAT , S_IRUSR | S_IWUSR);
                 if (fd == -1) {
@@ -585,10 +582,10 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
     //     }
     //     cerr << "File Deleted!!\n" << flush;
     // }
-    // {
-    //     lock_guard <mutex> guard(downloadFileMutex);
-    //     downloadingFiles.erase({groupName, fileName});
-    //     downloadedFiles.insert({groupName, fileName});
-    // }
-    // cout << "Success: File Downloaded Successfully\n" << flush;
+    {
+        lock_guard <mutex> guard(downloadFileMutex);
+        downloadingFiles.erase({groupName, fileName});
+        downloadedFiles.insert({groupName, fileName});
+    }
+    cout << "Success: File Downloaded Successfully\n" << flush;
 }

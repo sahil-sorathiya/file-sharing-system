@@ -1,8 +1,6 @@
 #include "headers.h"
 
 unordered_map <string, User> registeredUsers; // userName
-// unordered_map <string, string> tokensToUser; //token, userName
-// unordered_map <string, pair<string, string>> UserToIpAndTokens; // userName, IP:PORT, token
 unordered_map <string, string> userToIp; // userName, IP:PORT
 unordered_map <string, Group> groups; // groupName
 mutex userMapMutex, groupMapMutex, loginMutex;
@@ -96,11 +94,7 @@ int main(int argc, char *argv[]){
         }
         cout << "Connection established with FD of " + to_string(clientSocket) + "\n" << flush;
 
-        char clientIP[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(clientAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
-        int clientPort = ntohs(clientAddr.sin_port);
-
-        thread t1(handleClientRequest, clientSocket, clientIP, clientPort);
+        thread t1(handleClientRequest, clientSocket);
         t1.detach();
     }
 
