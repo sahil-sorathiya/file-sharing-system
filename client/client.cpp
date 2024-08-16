@@ -1,6 +1,7 @@
 #include "headers.h"
 
 string authToken = "default";
+bool isDevMode = false;
 
 map <pair<string, string>, string> fileNameToFilePath;
 map <string, vector<int> > filePathToAvailablePieces;
@@ -10,17 +11,21 @@ set <pair <string, string>> downloadedFiles;
 mutex nameToPathMutex, pathToPieceMutex, downloadFileMutex;
 
 int main(int argc, char *argv[]){
+    //: Processing arguments and extracting Tracker & Seeder IP:Port
     pair <pair<string, int>, pair<string, int>> clientAndTrackerIpPort = processArgs(argc, argv);
     pair<string, int> seederIpPort = clientAndTrackerIpPort.first;
     pair<string, int> trackerIpPort = clientAndTrackerIpPort.second;
 
+    if(isDevMode) configureLogger("./logs_"+argv[1]);
+    
+    //: Thread for Seeder Listening
     thread t0(openSeederSocket, seederIpPort);
     t0.detach();
 
+    //: Client Socket for tracker connection
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket < 0) {
-        cerr << "Error: creating socket!!\n" << flush;
-        cout << "ERROR : " + to_string(errno)  + "\n" << flush;
+        raiseError("ClientError: Client-Socket not created", errno);
         exit(errno);
     }
 
@@ -36,21 +41,18 @@ int main(int argc, char *argv[]){
     //: Here we have IP in string format so we can not use htonl
     //: Instead we use inet_pton(), converting it into uint_32t
     if (inet_pton(AF_INET, trackerIpPort.first.c_str(), &trackerAddr.sin_addr) <= 0) {
-        cerr << "Error: converting IP address of tracker!!\n" << flush;
-        cout << "ERROR : " + to_string(errno)  + "\n" << flush;
+        raiseError("ClientError: Error converting IP address of Tracker", errno);
         close(clientSocket);
         exit(errno);
     }
 
-    cout << "connecting with tracker at IP " + trackerIpPort.first + " Port " + to_string(trackerIpPort.second) + "\n" << flush;
+    //: Connecting to tracker
     if (connect(clientSocket, (struct sockaddr*)&trackerAddr, sizeof(trackerAddr)) < 0) {
-        cerr << "Error: connecting to tracker!!\n" << flush;
-        cout << "ERROR : " + to_string(errno)  + "\n" << flush;
+        raiseError("ClientError: Error connecting to Tracker", errno);
         close(clientSocket);
         exit(errno);
     }
-    cout << "Success: Connected to Tracker!!\n" << flush;
-
+    raiseSuccess("ClientSuccess: Connected to Tracker");
     while (true){
         string inputFromClient;
         cout << "Enter Command : " << flush;

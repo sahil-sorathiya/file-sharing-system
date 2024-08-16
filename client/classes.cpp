@@ -35,8 +35,12 @@ void ThreadPool::workerThread() {
             task = std::move(tasks.front());
             tasks.pop();
         }
-
-        task();
+        try{
+            task();
+        }
+        catch(const std::exception& e){
+            cout << "ERROR AT THREAD!!!\n" << flush;
+        }
     }
 }
 
@@ -56,7 +60,10 @@ void ThreadPool::enqueueTask(std::function<void()> task) {
 
 
 ThreadPool::~ThreadPool() {
+    {
+    std::unique_lock<std::mutex> lock(queueMutex);
     stop = true;
+    }
     condition.notify_all();
 
     for (std::thread &worker : workers) {

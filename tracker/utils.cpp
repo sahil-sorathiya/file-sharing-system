@@ -5,7 +5,7 @@ vector <string> tokenize(string buffer, char separator){
     string temp;
     for(auto it: buffer){
         if(it == separator) {
-            ans.push_back(temp);
+            if(temp.size()) ans.push_back(temp);
             temp.clear();
         }
         else temp.push_back(it);
