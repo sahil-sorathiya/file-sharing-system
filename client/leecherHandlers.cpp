@@ -2,7 +2,7 @@
 
 //: This function is used for process & send commands given by User from std input
 //TODO Also it is used for "upload_file_on_first_piece" by downloadFile() function, when first piece of file is downloaded
-void processUserRequests(int clientSocket, string inputFromClient, pair<string, int> trackerIpPort, pair<string, int> seederIpPort){
+void processUserRequests(int clientSocket, string inputFromClient){
 
     //: Tokenizing command given by User
     vector <string> tokens = tokenize(inputFromClient, ' ');
@@ -21,6 +21,7 @@ void processUserRequests(int clientSocket, string inputFromClient, pair<string, 
     }
 
     //: if command is "show_downloads" print download status of files.
+    // TODO Failed Implementation
     else if(tokens[0] == "show_downloads"){
         lock_guard <mutex> guard(downloadFileMutex);
         for(auto it: downloadingFiles){
@@ -133,26 +134,58 @@ void processUserRequests(int clientSocket, string inputFromClient, pair<string, 
 
     else messageForTracker = inputFromClient + " " + authToken;
 
+    string messageLength = to_string(messageForTracker.size());
+
+    messageForTracker = messageLength + " " + messageForTracker;
+    
+    if(isDevMode) leecherLog("INFO", "messageForTracker : " + messageForTracker);
+
     if(send(clientSocket, messageForTracker.c_str(), messageForTracker.size(), 0) < 0){
         raiseError("ClientError: Packet has not been sent to tracker", errno);
         close(clientSocket);
         exit(errno);
     }
+    cout << "148\n" << flush;
+    int totalDataLength = -1;
+    string receivedDataFromTracker;
 
-    char buffer[524288];
-    int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (bytesRead == 0) {
-        raiseWarning("ClientWarning : Tracker closed the connection\n");
-        close(clientSocket);
-        exit(errno);
-    } 
-    if (bytesRead < 0) {
-        raiseError("ClientError: Error reading from clientSocket!! Connection Force-Closed", errno);
-        close(clientSocket);
-        exit(errno);
-    } 
+    while(true) {
+        leecherLog("INFO", "153");
+        char buffer[524288];
+        int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+        leecherLog("INFO", "156");
+        if (bytesRead == 0) {
+            raiseWarning("ClientWarning : Tracker closed the connection\n");
+            close(clientSocket);
+            exit(errno);
+        } 
+        leecherLog("INFO", "162");
+        if (bytesRead < 0) {
+            raiseError("ClientError: Error reading from clientSocket!! Connection Force-Closed", errno);
+            close(clientSocket);
+            exit(errno);
+        } 
+        leecherLog("INFO", "168");
+        receivedDataFromTracker += string(buffer, bytesRead);
+        vector<string> temp;
+        leecherLog("INFO", "171");
+        if(totalDataLength == -1) {
+            temp = tokenize(receivedDataFromTracker, ' ');
+            totalDataLength = stoi(temp[0]) - (bytesRead - (temp[0].size() + 1));
+            receivedDataFromTracker = receivedDataFromTracker.substr(temp[0].size() + 1);
+        }
+        else {
+            totalDataLength -= bytesRead;
+        }
+        leecherLog("INFO", "180");
+        if(totalDataLength > 0) {
+            continue;
+        }
+        break;
+    }
 
-    string receivedDataFromTracker(buffer, bytesRead);
+    if(isDevMode) leecherLog("INFO", "receivedDataFromTracker : " + receivedDataFromTracker);
+
     vector <string> receivedDataTokens = tokenize(receivedDataFromTracker, ' ');
     
     if(receivedDataTokens[0] == "TrackerError:"){
@@ -223,7 +256,7 @@ void processUserRequests(int clientSocket, string inputFromClient, pair<string, 
         }
 
         destinationPath += fileName;
-        handleFileDownload(fileName, groupName, destinationPath, fileSize, SHAsStr, ipAndPortsStr, clientSocket, trackerIpPort, seederIpPort);
+        handleFileDownload(fileName, groupName, destinationPath, fileSize, SHAsStr, ipAndPortsStr, clientSocket);
         return;
     }
 
@@ -231,20 +264,18 @@ void processUserRequests(int clientSocket, string inputFromClient, pair<string, 
     return;
 }
 
-void handleFileDownload(string fileName, string groupName, string destinationPath, int fileSize, string SHAsStr, string ipAndPortsStr, int clientSocket, pair<string, int> trackerIpPort, pair<string, int> seederIpPort){
+void handleFileDownload(string fileName, string groupName, string destinationPath, int fileSize, string SHAsStr, string ipAndPortsStr, int clientSocket){
     vector <string> SHAs = tokenize(SHAsStr, ':');
     vector <string> ipAndPorts = tokenize(ipAndPortsStr, ',');
     
     int totalPieces = SHAs.size()-1;
-    raiseWarning("TotaoPieces" + to_string(totalPieces));
+    raiseWarning("TotalPieces" + to_string(totalPieces));
     unordered_map <int, vector <string> > pieceToSeeders; // piece no., ip:port
 
     for(auto it: ipAndPorts){
         vector <string> temp = tokenize(it, ':');
         string ip = temp[0];
         int port = stoi(temp[1]);
-
-        
 
         int leecherSocket = socket(AF_INET, SOCK_STREAM, 0);
         if (leecherSocket < 0) {
@@ -269,54 +300,76 @@ void handleFileDownload(string fileName, string groupName, string destinationPat
         }
 
         string messageForSeeder = "give_piece_info " + fileName + " " + groupName; 
+        string messageLength = to_string(messageForSeeder.size());
+        messageForSeeder = messageLength + " " + messageForSeeder;
+
         if(send(leecherSocket, messageForSeeder.c_str(), messageForSeeder.size(), 0) <= 0){
             if(isDevMode) raiseError("LeecherError: Packet has not been sent to seeder");
             close(leecherSocket);
             continue;
         }
+        string receivedDataFromSeeder;
+        int totalDataLength = -1;
+        while(true) {
+                
+            char buffer[524288];
+            int bytesRead = recv(leecherSocket, buffer, sizeof(buffer), 0);
+            if (bytesRead == 0) {
+                if(isDevMode) raiseWarning("ClientWarning : Seeder closed the connection\n");
+                close(leecherSocket);
+                break;
+            } 
+            else if (bytesRead < 0) {
+                if(isDevMode) raiseError("ClientError: Error reading from leecherSocket!! Connection Force-Closed", errno);
+                close(leecherSocket);
+                break;
+            }
+            else {
+                receivedDataFromSeeder += string(buffer, bytesRead);
+                
+                vector<string> temp;
+                if(totalDataLength == -1) {
+                    temp = tokenize(receivedDataFromSeeder, ' ');
+                    totalDataLength = stoi(temp[0]) - (bytesRead - (temp[0].size() + 1));
 
-        char buffer[524288];
-        int bytesRead = recv(leecherSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead == 0) {
-            if(isDevMode) raiseWarning("ClientWarning : Seeder closed the connection\n");
-            close(leecherSocket);
-            continue;
-        } 
-        if (bytesRead < 0) {
-            if(isDevMode) raiseError("ClientError: Error reading from leecherSocket!! Connection Force-Closed", errno);
-            close(leecherSocket);
-            continue;
+                    if(temp[1] == "SeederError:"){
+                        if(isDevMode) raiseError(receivedDataFromSeeder);
+                        break;
+                    }
+                }
+                else {
+                    totalDataLength -= bytesRead;
+                }
+                if(totalDataLength > 0) {
+                    continue;
+                }
+                close(leecherSocket);
+                break;
+            }            
         }
-
-        string receivedDataFromSeeder(buffer, bytesRead);
-        vector <string> receivedDataTokens = tokenize(receivedDataFromSeeder, ' ');
-        
-        if(receivedDataTokens[0] == "SeederError:"){
-            if(isDevMode) raiseError(receivedDataFromSeeder);
-            continue;
-        }
-
-        for(int i = 1; i < (int)receivedDataTokens.size(); i++){
+        vector<string> receivedDataTokens = tokenize(receivedDataFromSeeder, ' ');
+        for(int i = 2; i < (int)receivedDataTokens.size(); i++){
             pieceToSeeders[stoi(receivedDataTokens[i])].push_back(it);            
         }
-        close(leecherSocket);
+
+
     }
 
     if((int)pieceToSeeders.size() != totalPieces) {
-        raiseError("LeecherError: Can not download the file!! All pieces of file is not available in the group");
-        cout << "!!\n" << flush;
+        raiseError("LeecherError: Can not download the file!! All pieces of file is not available in the group " + to_string(pieceToSeeders.size()) + " " + to_string(totalPieces));
+        return;
     }
     {
         lock_guard <mutex> guard(downloadFileMutex);
         downloadingFiles.insert({groupName, fileName});
     }
 
-    thread t2(downloadFile, fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket, trackerIpPort, seederIpPort);
+    thread t2(downloadFile, fileName, groupName, destinationPath, fileSize, SHAs, pieceToSeeders, clientSocket);
     t2.detach();
 
 }
 
-void downloadFile(string fileName, string groupName, string destinationPath, int fileSize, vector <string> SHAs, unordered_map <int, vector <string>> pieceToSeeders, int clientSocket, pair<string, int> trackerIpPort, pair<string, int> seederIpPort){
+void downloadFile(string fileName, string groupName, string destinationPath, int fileSize, vector <string> SHAs, unordered_map <int, vector <string>> pieceToSeeders, int clientSocket){
     vector <pair <int, vector <string>>> pieceToSeedersVector;
 
     for(auto it: pieceToSeeders){
@@ -327,23 +380,22 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
         return a.second.size() < b.second.size();
     });
 
-    // sort(pieceToSeedersVector.begin(), pieceToSeedersVector.end(), [](const auto &a, const auto &b) {
-    //     if(a.second.size() != b.second.size())  return a.second.size() < b.second.size();
-    //     return a.first < b.first;
-    // });
-
     ThreadPool pool(POOL_SIZE); 
             
     mutex isFirstPieceMutex;
     bool isFirstPiece = true;
 
     for (int i = 0; i < (int)pieceToSeedersVector.size(); i++) {
-        pool.enqueueTask([i, pieceToSeedersVector, SHAs, clientSocket, trackerIpPort, seederIpPort,
+        if(isDevMode) leecherLog("DEBUG3", "");
+        pool.enqueueTask([i, pieceToSeedersVector, SHAs, clientSocket,
         fileName, groupName, &isFirstPiece, &isFirstPieceMutex, destinationPath, fileSize] {
+
+            int pieceNumber = pieceToSeedersVector[i].first;
+        
             int retry = 5; //: If any error int below code, we will retry 
             while(1){
                 if(retry == 0) {
-                    if(isDevMode) raiseError("LeecherError: Packet download failed");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Packet download failed");
                     break;
                 }
                 //: Randomly selecting one Seeder from many
@@ -351,19 +403,17 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                 srand(time(nullptr)); //: setting a seed
                 int random_number = std::rand() % (n);
                                 
-                // int leecherSocket = pieceToSeedersVector[i].second[random_number];
-                
-                string temp = pieceToSeedersVector[i].second[random_number];
+                string seederIpPort = pieceToSeedersVector[i].second[random_number];
                 string ip = "";
-                for(auto it : temp) {
+                for(auto it : seederIpPort) {
                     if(it!=':') ip.push_back(it);
                     else break;
                 }
-
-                int port = stoi(temp.substr(ip.size()+1));
+                int port = stoi(seederIpPort.substr(ip.size()+1));
 
                 int leecherSocket = socket(AF_INET, SOCK_STREAM, 0);
                 if (leecherSocket < 0) {
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Socket creation failed "+ seederIpPort);
                     continue;
                 }
 
@@ -372,20 +422,26 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                 seederAddr.sin_port = htons(port);  
 
                 if (inet_pton(AF_INET, ip.c_str(), &seederAddr.sin_addr) <= 0) {
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Socket creation failed at inet_pton "+ seederIpPort);
                     close(leecherSocket);
                     continue;
                 }
+                
+                // if(isDevMode) leecherLog("DEBUG1", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Before connect "+ seederIpPort);
 
                 if (connect(leecherSocket, (struct sockaddr*)&seederAddr, sizeof(seederAddr)) < 0) {
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Socket connection failed "+ seederIpPort);
                     close(leecherSocket);
                     continue;
                 }
+                if(isDevMode) leecherLog("DEBUG2", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" After connect"+ seederIpPort);
 
+                string messageForSeeder = "send_piece " + fileName + " " + groupName + " " + to_string(pieceNumber); 
+                string messageLength = to_string(messageForSeeder.size());
+                messageForSeeder = messageLength + " " + messageForSeeder;
 
-                string messageForSeeder = "send_piece " + fileName + " " + groupName + " " + to_string(pieceToSeedersVector[i].first); 
-                
                 if(send(leecherSocket, messageForSeeder.c_str(), messageForSeeder.size(), 0) < 0){
-                    if(isDevMode) raiseError("LeecherError: Packet has not been sent to seeder");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Packet has not been sent to seeder "+ seederIpPort);
                     close(leecherSocket);
                     retry--;
                     continue;
@@ -393,58 +449,61 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                 char buffer[PIECE_SIZE + 25];
                 int bytesRead = recv(leecherSocket, buffer, sizeof(buffer), 0);
                 if (bytesRead == 0) {
-                    // if(isDevMode) raiseWarning("ClientWarning : Seeder closed the connection\n");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Seeder closed the connection "+ seederIpPort);
                     close(leecherSocket);
                     retry--;
                     continue;
                 }
                 if (bytesRead < 0) {
-                    // if(isDevMode) raiseError("ClientError: Error reading from leecherSocket!! Connection Force-Closed", errno);
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Error while recieving the packet "+ seederIpPort);
                     close(leecherSocket);
                     retry--;
                     continue;
                 }
-                cout << "SOCKET FD : " + to_string(leecherSocket) + "\n" << flush;
                 close(leecherSocket);
+
                 string receivedDataFromSeeder(buffer, bytesRead);
                 vector <string> receivedDataTokens = tokenize(receivedDataFromSeeder, ' ');
-                if(receivedDataTokens[0] == "SeederError:"){
-                    // if(isDevMode) raiseError(receivedDataFromSeeder);
+                if(receivedDataTokens[1] == "SeederError:"){
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) + receivedDataFromSeeder + seederIpPort);
                     retry--;
                     continue;
                 }
-                string pieceData = receivedDataFromSeeder.substr(strlen("SeederSuccess: "));
+                
+                string pieceData = receivedDataFromSeeder.substr(strlen("SeederSuccess: ") + receivedDataTokens[0].size() + 1);
                 string pieceSHA = findPieceSHA(pieceData);
                 if(pieceSHA != SHAs[pieceToSeedersVector[i].first + 1]){
-                    // if(isDevMode) raiseError("LeecherError: PieceSHA mismatched!!");
-                    // break;
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" PieceSHA misnatched "+ seederIpPort);
                     retry--;
                     continue;
                 }
+
                 int fd = open(destinationPath.c_str(), O_WRONLY | O_CREAT , S_IRUSR | S_IWUSR);
                 if (fd == -1) {
-                    // if(isDevMode) raiseError("LeecherError: Failed to open file");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Error opening destinatoin file "+ seederIpPort);
                     retry--;
                     continue;
                 }
+
                 int pieceOffset = PIECE_SIZE * pieceToSeedersVector[i].first;
                 if(lseek(fd, pieceOffset, SEEK_SET) == -1){
-                    // if(isDevMode) raiseError("LeecherError: Failed to Seek");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Lseek failed for destination file "+ seederIpPort);
                     retry--;
                     continue;
                 }
                 int written = write(fd, pieceData.c_str(), pieceData.size());
 
                 if (written == -1) {
-                    // if(isDevMode) raiseError("LeecherError: LeecherError: Failed to write");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Piece write failed to destination file "+ seederIpPort);
                     retry--;
                     continue;
                 }
                 if (written != (int)pieceData.size()) {
-                    // if(isDevMode) raiseError("LeecherError: Incomplete write");
+                    if(isDevMode) leecherLog("ERROR", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Piece write incomplete to destinaton file "+ seederIpPort);
                     retry--;
                     continue;
                 }
+                close(fd);
                 {
                     lock_guard <mutex> guard(isFirstPieceMutex);
                     if(isFirstPiece) {
@@ -452,38 +511,40 @@ void downloadFile(string fileName, string groupName, string destinationPath, int
                         for(auto it : SHAs) {
                             command.append(it + ":");
                         }
-                        processUserRequests(clientSocket, command, trackerIpPort, seederIpPort);
+                        processUserRequests(clientSocket, command);
                         isFirstPiece = false;
 
                     }
-                }
-                if (close(fd) == -1) {
-                    if(isDevMode) raiseWarning("LeecherError: Failed to close file");
                 }
                 {
                     lock_guard <mutex> guard(pathToPieceMutex);
                     filePathToAvailablePieces[destinationPath].push_back(pieceToSeedersVector[i].first);
                 }
-                // close(leecherSocket);
+                if(isDevMode) leecherLog("SUCCESS", "At Piece = "+ to_string(pieceNumber) + " Retry = " + to_string(retry) +" Piece downloaded & written succsessfully "+ seederIpPort);
                 break;    
             }
 
         });
     }
-    // vector <string> tempSHAs = findSHA(destinationPath);
-    // if(tempSHAs[0] != SHAs[0]){
-    //     // if(isDevMode) raiseError("LeecherError: File SHA mismatched!! Deleting the file");
-    //     if (unlink(destinationPath.c_str()) == -1) {
-    //         // if(isDevMode) raiseError("LeecherError: Error deleting file");
-    //         return;
-    //     }
-    //     // raiseSuccess("LeecherSuccess: File Deleted");
-    // }
+
+    pool.wait();
+    if(isDevMode) leecherLog("INFO:", "File downloaded. Checking SHA");
+    vector <string> tempSHAs = findSHA(destinationPath);
+    if(tempSHAs[0] != SHAs[0]){
+        if(isDevMode) leecherLog("INFO:", "File downloaded. SHA Mismatch");
+
+        if (unlink(destinationPath.c_str()) == -1) {
+            // if(isDevMode) raiseError("LeecherError: Error deleting file");
+            return;
+        }
+        // raiseSuccess("LeecherSuccess: File Deleted");
+    }
     {
         lock_guard <mutex> guard(downloadFileMutex);
         downloadingFiles.erase({groupName, fileName});
         downloadedFiles.insert({groupName, fileName});
     }
-    // raiseSuccess("LeecherSuccess: File Downloaded Successfully");
+    if(isDevMode) leecherLog("INFO:", "File downloaded. SHA Matched");
+
     return;
 }

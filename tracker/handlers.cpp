@@ -13,27 +13,53 @@ void handleTrackerQuit(int trackerFd) {
 
 void handleClientRequest(int clientSocket){
     while (true) {
-        char buffer[524288];
-        int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead == 0) {
-            cout << "Connection Closed: Client-socket at fd " + to_string(clientSocket) + " closed the connection\n" << flush;
-            close(clientSocket);
-            break;
-        } else if (bytesRead < 0) {
-            cerr << "Connection Force-Closed: Error reading from clientSocket at fd " + to_string(clientSocket) + "\n" << flush;
-            close(clientSocket);
-            break;
-        } else {
-            // Handle the received data
-            string receivedData = string(buffer, bytesRead);
-            string response = executeCommand(clientSocket, receivedData);
-
-            if(send(clientSocket, response.c_str(), response.size(), 0) < 0){
-                cerr << "Error sending message to client " + string(strerror(errno))  + "\n" << flush;
+        int totalDataLength = -1;
+        string receivedData;
+        while(true) {
+            char buffer[524288];
+            int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+            if (bytesRead == 0) {
+                cout << "Connection Closed: Client-socket at fd " + to_string(clientSocket) + " closed the connection\n" << flush;
                 close(clientSocket);
+                return;
+            } 
+            else if (bytesRead < 0) {
+                cerr << "Connection Force-Closed: Error reading from clientSocket at fd " + to_string(clientSocket) + "\n" << flush;
+                cerr << "ERROR : " + to_string(errno) + " - " + strerror(errno) + "\n" << flush;
+                close(clientSocket);
+                return;
+            } 
+            else {
+                // Handle the received data
+                receivedData += string(buffer, bytesRead);
+                vector<string> temp;
+                if(totalDataLength == -1) {
+                    temp = tokenize(receivedData, ' ');
+                    totalDataLength = stoi(temp[0]) - (bytesRead - (temp[0].size() + 1));
+                    receivedData = receivedData.substr(temp[0].size() + 1);
+                }
+                else {
+                    totalDataLength -= bytesRead;
+                }
+                if(totalDataLength > 0) {
+                    continue;
+                }
+
+                string response = executeCommand(clientSocket, receivedData);
+
+                string messageLength = to_string(response.size());
+                response = messageLength + " " + response;
+    
+
+                if(send(clientSocket, response.c_str(), response.size(), 0) < 0){
+                    cerr << "Error sending message to client " + string(strerror(errno))  + "\n" << flush;
+                    close(clientSocket);
+                    return;
+                }
                 break;
             }
         }
+
     }
 }
 

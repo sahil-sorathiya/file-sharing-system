@@ -9,7 +9,7 @@
 
 #define TOKEN_EXPIRY_DURATION 3600
 #define SECRET_KEY "chin_tapak_dum_dum"
-#define PIECE_SIZE 1024
+#define PIECE_SIZE 10
 
 using namespace std;
 

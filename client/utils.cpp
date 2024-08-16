@@ -15,7 +15,7 @@ vector <string> tokenize(string buffer, char separator){
     return ans;
 }
 
-pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]){
+void processArgs(int argc, char *argv[]){
     if(argc != 3){
         if(argc == 4 && string(argv[3]) == "dev") {
             isDevMode = true;
@@ -25,74 +25,134 @@ pair<pair <string, int>, pair <string, int> > processArgs(int argc, char *argv[]
             exit(0);
         }
     }
-    char *trackerInfoFileName = argv[2];
+    
     char *seederIpAndPort = argv[1];
+    vector <string> seederIpPortVec = tokenize(seederIpAndPort, ':');
+    string seederIp = seederIpPortVec[0];
+    int seederPort = stoi(seederIpPortVec[1]);
     
-    vector <string> seederIpPort = tokenize(seederIpAndPort, ':');
-    string seederIp = seederIpPort[0];
-    int seederPort = stoi(seederIpPort[1]);
-    
+    char *trackerInfoFileName = argv[2];
     int fd = open(trackerInfoFileName, O_RDONLY);
     if(fd < 0) {
         string s = trackerInfoFileName;
         cout << "Error opening " + s + " file\n" << flush;
-        exit(0); 
+        exit(errno); 
     }
     
     char buffer[524288];
-    read(fd, buffer, sizeof(buffer));
+    if(read(fd, buffer, sizeof(buffer)) < 0) {
+        string s = trackerInfoFileName;
+        cout << "Error reading " + s + " file\n" << flush;
+        exit(errno); 
+    }
+    close(fd);
 
     vector <string> ipAndPorts = tokenize(buffer, '\n');
     string trackerIp = ipAndPorts[0];
     int trackerPort = stoi(ipAndPorts[1]);
 
-    return {{seederIp, seederPort}, {trackerIp, trackerPort}};
+    //: Setting up global variables
+    seederIpPort = {seederIp, seederPort};
+    trackerIpPort = {trackerIp, trackerPort};
 }
 
-void configureLogger(string logDirPath){
+void configureLogger(){
+    string logDirPath = "./logs_"+seederIpPort.first+":"+to_string(seederIpPort.second);
     struct stat info;
     if (stat(logDirPath.c_str(), &info) != 0 || !(info.st_mode & S_IFDIR)) {
         if (mkdir(logDirPath.c_str(), 0755) != 0) {
+            raiseError("ClientError: Error making new directory for log");
             return;
         }
-        return;
     }
-    string leecherLogFilePath = logDirPath+"/leecherLogs.txt"
-    int fd = open(leecherLogFilePath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) {
-        return 1;
+    string leecherLogFilePath = logDirPath+"/leecherLogs.txt";
+    int fd = open(leecherLogFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if(fd <= 0){
+        raiseError("ClientError: Error opening leecher log file");
+    }
+    string temp = "LEECHER LOGGER FILE";
+    int bytesWritten = write(fd, temp.c_str(), temp.size());
+    if(bytesWritten < 0){
+        raiseError("ClientError: Error writing leecher log file");
     }
     close(fd);
     
-    string seederLogFilePath = logDirPath+"/seederLogs.txt"
-    fd = open(seederLogFilePath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) {
-        return 1;
+    string seederLogFilePath = logDirPath+"/seederLogs.txt";
+    fd = open(seederLogFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if(fd <= 0){
+        raiseError("ClientError: Error opening leecher log file");
+    }
+    temp = "SEEDER LOGGER FILE";
+    bytesWritten = write(fd, temp.c_str(), temp.size());
+    if(bytesWritten < 0){
+        raiseError("ClientError: Error writing leecher log file");
     }
     close(fd);
+    raiseSuccess("ClientSuccess: Log files created successfully");
     return;
 }
 
-void log(string filePath, string type, string content){
+void leecherLog(string type, string content){
+    lock_guard <mutex> guard(leecherLoggerMutex);
+    string logDirPath = "./logs_"+seederIpPort.first+":"+to_string(seederIpPort.second);
+    string filePath = logDirPath + "/leecherLogs.txt";
+
     time_t current_time = time(nullptr);
     struct tm* local_time = localtime(&current_time);
     char buffer[100];
     strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", local_time);
     string time = buffer;
 
-    int fd = open(filePath, O_WRONLY, 0644);
+    // {
+        
+    int fd = open(filePath.c_str(), O_WRONLY | O_APPEND, 0644);
     if (fd == -1) {
-        return 1;
+        return;
     }
-    string temp = "["+time+"]["+type+"]"+content;
-    int bytes_written = write(fd, content, strlen(content));
-    if (bytes_written == -1) {
+
+    string temp = "\n["+time+"]["+type+"]"+content;
+
+    
+    int bytesWritten = write(fd, temp.c_str(), temp.size());
+    if (bytesWritten == -1) {
         close(fd);
-        return 1;
+        return;
     }
+    // }
+    
     close(fd);
 }
 
+void seederLog(string type, string content){
+    lock_guard <mutex> guard(seederLoggerMutex);
+    
+    string logDirPath = "./logs_"+seederIpPort.first+":"+to_string(seederIpPort.second);
+    string filePath = logDirPath + "/seederLogs.txt";
+
+    time_t current_time = time(nullptr);
+    struct tm* local_time = localtime(&current_time);
+    char buffer[100];
+    strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", local_time);
+    string time = buffer;
+
+    // {
+        
+    
+    int fd = open(filePath.c_str(), O_WRONLY | O_APPEND, 0644);
+    if (fd == -1) {
+        return;
+    }
+
+    string temp = "\n["+time+"]["+type+"]"+content;
+
+    int bytesWritten = write(fd, temp.c_str(), temp.size());
+    if (bytesWritten == -1) {
+        close(fd);
+        return;
+    }
+    close(fd);
+    // }
+}
 
 vector<string> findSHA(string filePath){
 

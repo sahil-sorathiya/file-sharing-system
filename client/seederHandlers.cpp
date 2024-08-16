@@ -1,6 +1,6 @@
 #include "headers.h"
 
-void openSeederSocket(pair <string, int> seederIpPort){
+void openSeederSocket(){
     int domainAddressFormat = AF_INET; //: Address Family (IPv4)
     int type = SOCK_STREAM; //: TCP
     int protocol = 0; //: TCP/IP
@@ -50,6 +50,8 @@ void openSeederSocket(pair <string, int> seederIpPort){
         char leecherIP[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(leecherAddr.sin_addr), leecherIP, INET_ADDRSTRLEN);
         int leecherPort = ntohs(leecherAddr.sin_port);
+        string temp = leecherIP;
+        if(isDevMode) seederLog("INFO", " Connected with : leecherIp " + temp + " Port :" +to_string(leecherPort));
 
         thread t1(handleLeecherRequest, leecherSocket, leecherIP, leecherPort);
         t1.detach();
@@ -58,22 +60,46 @@ void openSeederSocket(pair <string, int> seederIpPort){
 
 void handleLeecherRequest(int leecherSocket, string leecherIP, int leecherPort){
     while (true) {
-        char buffer[524288];
-        int bytesRead = recv(leecherSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead == 0) {
-            close(leecherSocket);
-            break;
-        } else if (bytesRead < 0) {
-            close(leecherSocket);
-            break;
-        } else {
-            string receivedData(buffer, bytesRead);
-            string response = executeCommand(receivedData);
+        int totalDataLength = -1;
+        string receivedData;
+        while(true) {
+            char buffer[524288];
+            int bytesRead = recv(leecherSocket, buffer, sizeof(buffer), 0);
+            // if(isDevMode) seederLog("INFO", " Recieved data : " + buffer + " Leecher IP " + leecherIP + " Leacher Port " + to_string(leecherPort));
 
-            if(send(leecherSocket, response.c_str(), response.size(), 0) < 0){
+            if (bytesRead == 0) {
                 close(leecherSocket);
-                break;
+                return;
+            } else if (bytesRead < 0) {
+                close(leecherSocket);
+                return;
+            } else {
+                receivedData += string(buffer, bytesRead);
+                vector<string> temp;
+                if(totalDataLength == -1) {
+                    temp = tokenize(receivedData, ' ');
+                    totalDataLength = stoi(temp[0]) - (bytesRead - (temp[0].size() + 1));
+                    receivedData = receivedData.substr(temp[0].size() + 1);
+                }
+                else {
+                    totalDataLength -= bytesRead;
+                }
+                if(totalDataLength > 0) {
+                    continue;
+                }
+                if(isDevMode) seederLog("INFO", " Recieved data : " + receivedData + " Leecher IP " + leecherIP + " Leacher Port " + to_string(leecherPort));
+
+                string response = executeCommand(receivedData);
+                response = to_string(response.size()) + " " + response;
+
+                if(isDevMode) seederLog("INFO", " Response Sent : For " + receivedData + " Leecher IP " + leecherIP + " Leacher Port " + to_string(leecherPort));
+
+                if(send(leecherSocket, response.c_str(), response.size(), 0) < 0){
+                    close(leecherSocket);
+                    return;
+                }
             }
+            break;
         }
     }
 }

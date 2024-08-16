@@ -9,17 +9,18 @@ set <pair <string, string>> downloadingFiles;
 set <pair <string, string>> downloadedFiles;
 
 mutex nameToPathMutex, pathToPieceMutex, downloadFileMutex;
+mutex leecherLoggerMutex, seederLoggerMutex;
+pair<string, int> seederIpPort, trackerIpPort;
 
 int main(int argc, char *argv[]){
     //: Processing arguments and extracting Tracker & Seeder IP:Port
-    pair <pair<string, int>, pair<string, int>> clientAndTrackerIpPort = processArgs(argc, argv);
-    pair<string, int> seederIpPort = clientAndTrackerIpPort.first;
-    pair<string, int> trackerIpPort = clientAndTrackerIpPort.second;
+    //: This function will set global variables "isDevMode", "seederIpPort", "trackerIpPort"
+    processArgs(argc, argv);
 
-    if(isDevMode) configureLogger("./logs_"+argv[1]);
+    if(isDevMode) configureLogger();
     
     //: Thread for Seeder Listening
-    thread t0(openSeederSocket, seederIpPort);
+    thread t0(openSeederSocket);
     t0.detach();
 
     //: Client Socket for tracker connection
@@ -53,11 +54,12 @@ int main(int argc, char *argv[]){
         exit(errno);
     }
     raiseSuccess("ClientSuccess: Connected to Tracker");
+    
     while (true){
         string inputFromClient;
         cout << "Enter Command : " << flush;
         getline(cin, inputFromClient);
-        processUserRequests(clientSocket, inputFromClient, trackerIpPort, seederIpPort);
+        processUserRequests(clientSocket, inputFromClient);
     }
 
     return 0;
